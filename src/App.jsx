@@ -27,15 +27,17 @@ function App() {
   const [volume, setVolume] = useState(0.5); // Start with 50% volume
   const audioRef = useRef();
 
+  // Function to play a random song based on price change
+  const playSongBasedOnPrice = (priceChange) => {
+    const songList = priceChange >= 0 ? HAPPY_SONGS : SAD_SONGS;
+    const randomIndex = Math.floor(Math.random() * songList.length);
+    setMusic(songList[randomIndex]);
+  };
+
+  // Function to play a random song based on current price change
   const playRandomSong = () => {
-    if (change >= 0) {
-      // Play random happy song
-      const randomIndex = Math.floor(Math.random() * HAPPY_SONGS.length);
-      setMusic(HAPPY_SONGS[randomIndex]);
-    } else {
-      // Play random sad song
-      const randomIndex = Math.floor(Math.random() * SAD_SONGS.length);
-      setMusic(SAD_SONGS[randomIndex]);
+    if (change !== null) {
+      playSongBasedOnPrice(change);
     }
   };
 
@@ -48,13 +50,9 @@ function App() {
         const diff = data.bitcoin.usd_24h_change;
         setPrice(btc);
         setChange(diff);
-
-        // Determine which music to play based on price change
-        if (diff >= 0) {
-          setMusic('happy.mp3');
-        } else {
-          setMusic('sad.mp3');
-        }
+        
+        // Play a song based on the price trend
+        playSongBasedOnPrice(diff);
       } catch (error) {
         console.error('Error fetching Bitcoin price:', error);
       }
