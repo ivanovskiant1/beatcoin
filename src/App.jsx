@@ -39,6 +39,24 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const audioRef = useRef();
 
+  // Play a random happy song immediately on mount
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * HAPPY_SONGS.length);
+    setMusic(HAPPY_SONGS[randomIndex]);
+    
+    // Ensure audio plays after a short delay to handle browser autoplay policies
+    const timer = setTimeout(() => {
+      if (audioRef.current) {
+        audioRef.current.volume = volume;
+        audioRef.current.play().catch(error => {
+          console.log('Autoplay was prevented:', error);
+        });
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
   const playRandomSong = () => {
     if (change >= 0) {
       // Play random happy song
@@ -80,13 +98,30 @@ function App() {
 
   useEffect(() => {
     if (audioRef.current) {
-      if (!isMuted) {
-        audioRef.current.load();
-        audioRef.current.volume = volume;
-        audioRef.current.play().catch(error => {
-          console.error('Error playing audio:', error);
-        });
-      }
+      // Set volume based on mute state
+      audioRef.current.volume = isMuted ? 0 : volume;
+      
+      // Try to play the audio
+      const playAudio = async () => {
+        try {
+          await audioRef.current.play();
+        } catch (error) {
+          console.log('Playback failed:', error);
+          // If autoplay was prevented, try again after a user interaction
+          const handleUserInteraction = () => {
+            audioRef.current.play().catch(e => console.log('Retry playback failed:', e));
+            document.removeEventListener('click', handleUserInteraction);
+            document.removeEventListener('touchstart', handleUserInteraction);
+            document.removeEventListener('keydown', handleUserInteraction);
+          };
+          
+          document.addEventListener('click', handleUserInteraction, { once: true });
+          document.addEventListener('touchstart', handleUserInteraction, { once: true });
+          document.addEventListener('keydown', handleUserInteraction, { once: true });
+        }
+      };
+      
+      playAudio();
     }
   }, [music, isMuted, volume]);
 
