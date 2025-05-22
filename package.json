@@ -22,9 +22,6 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "dev": "react-scripts start",
-    "install": "npm install",
-    "postinstall": "npm install",
-    "build:vercel": "npm run build",
     "deploy": "vercel --prod"
   },
   "eslintConfig": {
