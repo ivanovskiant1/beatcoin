@@ -162,13 +162,9 @@ function App() {
             onChange={handleVolumeChange}
           />
         </div>
-        <button 
-          className="random-button" 
-          onClick={playRandomSong}
-          title="Play random song based on price trend"
-        >
-          <i className="fas fa-music"></i>
-          Random Song
+        <button onClick={playRandomSong} className="play-button">
+          <i className="fas fa-play"></i>
+          Play Song
         </button>
       </div>
       <div className="coin-selector">
