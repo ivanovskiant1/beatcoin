@@ -1,7 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './App.css';
 
-const API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true';
+const COINS = [
+  { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
+  { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
+  { id: 'solana', symbol: 'SOL', name: 'Solana' },
+  { id: 'cardano', symbol: 'ADA', name: 'Cardano' },
+  { id: 'virtual-protocol', symbol: 'VIRTUAL', name: 'Virtual Protocol' },
+  { id: 'chex-token', symbol: 'CHEX', name: 'CHEX Token' }
+];
+
+const getApiUrl = (coinId) => 
+  `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`;
 
 // Happy songs (add more as needed)
 const HAPPY_SONGS = [
@@ -20,11 +30,13 @@ const SAD_SONGS = [
 ];
 
 function App() {
+  const [selectedCoin, setSelectedCoin] = useState(COINS[0]);
   const [price, setPrice] = useState(null);
   const [change, setChange] = useState(null);
   const [music, setMusic] = useState('happy.mp3');
   const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(0.5); // Start with 50% volume
+  const [volume, setVolume] = useState(0.5);
+  const [isLoading, setIsLoading] = useState(true);
   const audioRef = useRef();
 
   const playRandomSong = () => {
@@ -42,12 +54,13 @@ function App() {
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const res = await fetch(API_URL);
+        setIsLoading(true);
+        const res = await fetch(getApiUrl(selectedCoin.id));
         const data = await res.json();
-        const btc = data.bitcoin.usd;
-        const diff = data.bitcoin.usd_24h_change;
-        setPrice(btc);
-        setChange(diff);
+        const coinData = data[selectedCoin.id];
+        setPrice(coinData.usd);
+        setChange(coinData.usd_24h_change);
+        setIsLoading(false);
 
         // Determine which music to play based on price change
         if (diff >= 0) {
@@ -56,14 +69,14 @@ function App() {
           setMusic('sad.mp3');
         }
       } catch (error) {
-        console.error('Error fetching Bitcoin price:', error);
+        console.error('Error fetching price:', error);
       }
     };
 
     fetchPrice();
     const interval = setInterval(fetchPrice, 60000); // Fetch every minute
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedCoin]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -123,12 +136,34 @@ function App() {
           Random Song
         </button>
       </div>
+      <div className="coin-selector">
+        <select 
+          value={selectedCoin.id}
+          onChange={(e) => {
+            const coin = COINS.find(c => c.id === e.target.value);
+            if (coin) setSelectedCoin(coin);
+          }}
+          className="coin-dropdown"
+        >
+          {COINS.map(coin => (
+            <option key={coin.id} value={coin.id}>
+              {coin.name} ({coin.symbol})
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="price-container">
-        <h2 className="bitcoin-text">BITCOIN</h2>
-        <h1 className="price">{price ? `$${price.toLocaleString()}` : '--'}</h1>
-        <div className={`change ${change >= 0 ? 'positive' : 'negative'}`}>
-          {change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '--'}
-        </div>
+        <h1 className="bitcoin-text">{selectedCoin.symbol}</h1>
+        {isLoading ? (
+          <p className="price">Loading...</p>
+        ) : (
+          <>
+            <p className="price">${price ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : '--'}</p>
+            <p className={`change ${change >= 0 ? 'positive' : 'negative'}`}>
+              {change ? (change >= 0 ? '▲' : '▼') : ''} {change ? Math.abs(change).toFixed(2) : '--'}%
+            </p>
+          </>
+        )}
       </div>
       <audio 
         ref={audioRef} 
