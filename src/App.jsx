@@ -26,89 +26,178 @@ const POPULAR_COINS = [
   { id: 'near', name: 'NEAR Protocol', symbol: 'NEAR' },
 ];
 
-// Happy songs (bullish)
-const HAPPY_SONGS = [
-  'happy.mp3',
-  'happy2.mp3',
-  'happy3.mp3',
-  'happy4.mp3'
-];
+const HAPPY_SONGS = ['happy.mp3', 'happy2.mp3', 'happy3.mp3', 'happy4.mp3'];
+const SAD_SONGS = ['sad.mp3', 'sad2.mp3', 'sad3.mp3', 'sad4.mp3'];
 
-// Sad songs (bearish)
-const SAD_SONGS = [
-  'sad.mp3',
-  'sad2.mp3',
-  'sad3.mp3',
-  'sad4.mp3'
-];
+// Fetch with retry for rate limiting
+async function fetchWithRetry(url, retries = 3, delay = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, delay * (i + 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+  }
+}
+
+function pickSong(priceChange) {
+  const songList = priceChange >= 0 ? HAPPY_SONGS : SAD_SONGS;
+  return songList[Math.floor(Math.random() * songList.length)];
+}
 
 function App() {
   const [selectedCoin, setSelectedCoin] = useState(POPULAR_COINS[0]);
   const [price, setPrice] = useState(null);
   const [change, setChange] = useState(null);
-  const [music, setMusic] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.5);
   const [loading, setLoading] = useState(true);
-  const audioRef = useRef();
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  // Pick a random song based on price direction
-  const pickSong = useCallback((priceChange) => {
-    const songList = priceChange >= 0 ? HAPPY_SONGS : SAD_SONGS;
-    const randomIndex = Math.floor(Math.random() * songList.length);
-    return songList[randomIndex];
+  // Single Audio instance — lives outside React render cycle
+  const audioRef = useRef(null);
+  const currentMoodRef = useRef(null); // 'happy' or 'sad'
+  const debounceRef = useRef();
+  const searchDebounceRef = useRef();
+  const dropdownRef = useRef();
+
+  // Create the Audio object once on mount
+  useEffect(() => {
+    const audio = new Audio();
+    audio.loop = true;
+    audio.volume = 0.5;
+    audioRef.current = audio;
+
+    return () => {
+      audio.pause();
+      audio.src = '';
+    };
   }, []);
 
-  // Fetch price — only changes song on coin switch (initial or user-triggered)
-  const fetchPrice = useCallback(async (coinId, shouldChangeSong) => {
+  // Imperatively play a song — no React state involved
+  const playSong = useCallback((songFile) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = `/music/${songFile}`;
+    audio.volume = volume;
+    audio.muted = isMuted;
+    audio.play().catch(err => {
+      console.error('Error playing audio:', err);
+    });
+  }, [volume, isMuted]);
+
+  // Fetch price — only changes song when mood flips (bullish ↔ bearish)
+  const fetchPrice = useCallback(async (coinId, isCoinSwitch) => {
     try {
       const url = `${COINGECKO_BASE}/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`;
-      const res = await fetch(url);
-      const data = await res.json();
+      const data = await fetchWithRetry(url);
       const coinData = data[coinId];
       if (!coinData) return;
 
       setPrice(coinData.usd);
       setChange(coinData.usd_24h_change);
       setLoading(false);
+      setError(null);
 
-      if (shouldChangeSong) {
-        setMusic(pickSong(coinData.usd_24h_change));
+      if (isCoinSwitch) {
+        const newMood = coinData.usd_24h_change >= 0 ? 'happy' : 'sad';
+        // Only change song if no song playing yet or mood flipped
+        if (currentMoodRef.current !== newMood) {
+          currentMoodRef.current = newMood;
+          playSong(pickSong(coinData.usd_24h_change));
+        }
       }
-    } catch (error) {
-      console.error('Error fetching price:', error);
+    } catch (err) {
+      console.error('Error fetching price:', err);
       setLoading(false);
+      setError('Could not load price. Retrying...');
     }
-  }, [pickSong]);
+  }, [playSong]);
 
-  // On coin change: reset state, fetch price, and pick a new song
+  // On coin change: debounce then fetch
   useEffect(() => {
     setPrice(null);
     setChange(null);
     setLoading(true);
+    setError(null);
 
-    fetchPrice(selectedCoin.id, true);
-    const interval = setInterval(() => fetchPrice(selectedCoin.id, false), 60000);
-    return () => clearInterval(interval);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(() => {
+      fetchPrice(selectedCoin.id, true);
+    }, 500);
+
+    const interval = setInterval(() => fetchPrice(selectedCoin.id, false), 90000);
+    return () => {
+      clearTimeout(debounceRef.current);
+      clearInterval(interval);
+    };
   }, [selectedCoin, fetchPrice]);
 
-  // Play/load audio when music track changes
-  useEffect(() => {
-    if (audioRef.current && music) {
-      audioRef.current.load();
-      audioRef.current.volume = volume;
-      if (!isMuted) {
-        audioRef.current.play().catch(error => {
-          console.error('Error playing audio:', error);
-        });
-      }
+  // Search CoinGecko for any coin
+  const searchCoins = useCallback(async (query) => {
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
     }
-  }, [music]);
+    setSearching(true);
+    try {
+      const url = `${COINGECKO_BASE}/search?query=${encodeURIComponent(query)}`;
+      const data = await fetchWithRetry(url);
+      const coins = (data.coins || []).slice(0, 15).map(c => ({
+        id: c.id,
+        name: c.name,
+        symbol: c.symbol.toUpperCase(),
+        thumb: c.thumb,
+      }));
+      setSearchResults(coins);
+      setShowDropdown(coins.length > 0);
+    } catch (err) {
+      console.error('Error searching coins:', err);
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
 
-  const handleCoinChange = (e) => {
-    const coin = POPULAR_COINS.find(c => c.id === e.target.value);
-    if (coin) setSelectedCoin(coin);
+  const handleSearchInput = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => searchCoins(query), 400);
   };
+
+  const selectCoin = (coin) => {
+    setSelectedCoin(coin);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowDropdown(false);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const toggleMute = () => {
     const newMuted = !isMuted;
@@ -126,27 +215,45 @@ function App() {
     }
   };
 
-  // Play a new random song manually
   const playRandomSong = () => {
     if (change !== null) {
-      setMusic(pickSong(change));
+      playSong(pickSong(change));
     }
   };
 
   return (
     <div className="app-container">
-      <div className="coin-selector">
-        <select
-          className="coin-dropdown"
-          value={selectedCoin.id}
-          onChange={handleCoinChange}
-        >
-          {POPULAR_COINS.map(coin => (
-            <option key={coin.id} value={coin.id}>
-              {coin.name} ({coin.symbol})
-            </option>
-          ))}
-        </select>
+      <div className="coin-selector" ref={dropdownRef}>
+        <input
+          type="text"
+          className="coin-search"
+          placeholder={`${selectedCoin.name} (${selectedCoin.symbol}) — Search any coin...`}
+          value={searchQuery}
+          onChange={handleSearchInput}
+          onFocus={() => {
+            if (searchResults.length > 0) setShowDropdown(true);
+            else if (!searchQuery) {
+              setSearchResults(POPULAR_COINS.map(c => ({ ...c, thumb: null })));
+              setShowDropdown(true);
+            }
+          }}
+        />
+        {showDropdown && (
+          <div className="coin-dropdown-list">
+            {searching && <div className="coin-dropdown-item searching">Searching...</div>}
+            {searchResults.map(coin => (
+              <div
+                key={coin.id}
+                className={`coin-dropdown-item ${coin.id === selectedCoin.id ? 'active' : ''}`}
+                onClick={() => selectCoin(coin)}
+              >
+                {coin.thumb && <img src={coin.thumb} alt="" className="coin-thumb" />}
+                <span className="coin-name">{coin.name}</span>
+                <span className="coin-symbol">{coin.symbol}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mute-container">
@@ -188,18 +295,8 @@ function App() {
         <div className={`change ${change >= 0 ? 'positive' : 'negative'}`}>
           {change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '--'}
         </div>
+        {error && <div className="error-text">{error}</div>}
       </div>
-
-      <audio
-        ref={audioRef}
-        loop
-        onError={(e) => {
-          console.error('Audio error:', e.target.error);
-        }}
-      >
-        {music && <source src={`/music/${music}`} type="audio/mp3" />}
-        Your browser does not support the audio element.
-      </audio>
 
       <div className="slogan">Bullish Beats and Bearish Blues</div>
       <div className="disclaimer">

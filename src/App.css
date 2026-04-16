@@ -40,13 +40,12 @@ body {
   top: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10;
-  margin-bottom: 2rem;
+  z-index: 20;
   width: 90%;
-  max-width: 300px;
+  max-width: 350px;
 }
 
-.coin-dropdown {
+.coin-search {
   width: 100%;
   padding: 0.75rem 1rem;
   font-size: 1rem;
@@ -55,40 +54,82 @@ body {
   background: var(--card-bg);
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 50px;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-  background-repeat: no-repeat;
-  background-position: right 1rem top 50%;
-  background-size: 0.65em auto;
-  cursor: pointer;
+  outline: none;
   transition: all 0.2s ease;
   text-align: center;
-  text-align-last: center;
-  outline: none;
+  backdrop-filter: blur(5px);
 }
 
-.coin-dropdown:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
+.coin-search::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
 }
 
-.coin-dropdown:focus {
-  border-color: var(--bitcoin-orange);
-  box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.2);
+.coin-search:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+  border-radius: 20px 20px 0 0;
 }
 
-.coin-dropdown option {
-  background: var(--dark-bg);
+.coin-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(26, 26, 26, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-radius: 0 0 20px 20px;
+  max-height: 300px;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
+
+.coin-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
   color: var(--white);
-  padding: 0.5rem;
-  font-size: 0.9rem;
 }
 
-/* Hide default dropdown arrow in IE */
-.coin-dropdown::-ms-expand {
-  display: none;
+.coin-dropdown-item:hover {
+  background: rgba(255, 165, 0, 0.2);
+}
+
+.coin-dropdown-item.active {
+  background: rgba(255, 165, 0, 0.3);
+}
+
+.coin-dropdown-item.searching {
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+  font-style: italic;
+}
+
+.coin-dropdown-item:last-child {
+  border-radius: 0 0 18px 18px;
+}
+
+.coin-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.coin-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.coin-symbol {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
 }
 
 /* Price Container */
@@ -328,6 +369,13 @@ body {
 .loading-text {
   opacity: 0.6;
   animation: pulse 1.5s infinite;
+}
+
+.error-text {
+  font-size: clamp(0.8rem, 2vw, 1rem);
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 0.5rem;
+  font-style: italic;
 }
 
 /* Animations */
